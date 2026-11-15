@@ -1,0 +1,19 @@
+# Sensitive files
+src/main/resources/serviceAccountKey.json
+src/main/resources/application-dev.properties
+src/main/resources/application-prod.properties
+src/main/resources/application-staging.properties
+
+# Mac files
+.DS_Store
+
+# Eclipse files
+.classpath
+.project
+.settings/
+
+# Logs
+*.log
+
+# Maven build
+target/

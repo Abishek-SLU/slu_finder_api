@@ -1,1 +1,1 @@
-# slu_finder_api
+this repo contains API code
