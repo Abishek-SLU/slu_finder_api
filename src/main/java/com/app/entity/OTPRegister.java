@@ -1,4 +1,7 @@
-package com.app.entity; // 🔹 Change this to your actual package name
+
+package com.app.entity;
+
+import java.time.LocalDateTime;
 
 import javax.persistence.Column;
 import javax.persistence.Entity;
@@ -6,60 +9,46 @@ import javax.persistence.GeneratedValue;
 import javax.persistence.GenerationType;
 import javax.persistence.Id;
 import javax.persistence.Table;
+import javax.persistence.Version;
 
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.Getter;
+import lombok.Setter;
 
+@Getter
+@Setter
 @Entity
 @Table(name = "tb_otp_register")
-@Data
-@NoArgsConstructor
-@AllArgsConstructor
 public class OTPRegister {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, unique = true)
+    @Column(name = "email", nullable = false, unique = true)
     private String email;
 
-    public Long getId() {
-		return id;
-	}
-
-	public void setId(Long id) {
-		this.id = id;
-	}
-
-	public String getEmail() {
-		return email;
-	}
-
-	public void setEmail(String email) {
-		this.email = email;
-	}
-
-	public String getOtp() {
-		return otp;
-	}
-
-	public void setOtp(String otp) {
-		this.otp = otp;
-	}
-
-	public String getStatus() {
-		return status;
-	}
-
-	public void setStatus(String status) {
-		this.status = status;
-	}
-
-	@Column(nullable = false)
+    @Column(name = "otp", length = 100)
     private String otp;
 
-    @Column(nullable = false)
-    private String status; // "PENDING", "VERIFIED"
+    @Column(name = "status", nullable = false, length = 30)
+    private String status = "PENDING";
+
+    @Column(name = "created_at")
+    private LocalDateTime createdAt;
+
+    @Column(name = "expires_at")
+    private LocalDateTime expiresAt;
+
+    @Column(name = "last_sent_at")
+    private LocalDateTime lastSentAt;
+
+    @Column(name = "verified_at")
+    private LocalDateTime verifiedAt;
+
+    @Column(name = "attempt_count", nullable = false)
+    private Integer attemptCount = 0;
+
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version;
 }

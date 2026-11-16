@@ -10,21 +10,15 @@ import javax.persistence.GeneratedValue;
 import javax.persistence.Id;
 import javax.persistence.Table;
 import javax.persistence.Transient;
-import javax.validation.constraints.NotNull;
 
 import org.hibernate.annotations.GenericGenerator;
 import org.hibernate.annotations.Type;
 
-import com.amazonaws.services.workdocs.model.UserType;
-import com.app.enumeration.Status;
 import com.app.util.PasswordUtil;
 import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
-import io.swagger.annotations.ApiModelProperty;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
-import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -35,175 +29,53 @@ import lombok.Setter;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Data
 @EqualsAndHashCode(callSuper = false)
 @Entity
 @Table(name = "tb_users")
 public class User extends RecordModifier implements Serializable {
 
-	private static final long serialVersionUID = 1L;
+    private static final long serialVersionUID = 1L;
 
-	@Id
-	@GeneratedValue(generator = "UUID")
-	@GenericGenerator(name = "UUID", strategy = "org.hibernate.id.UUIDGenerator")
-	@Type(type = "uuid-char")
-	@Column(name = "id", updatable = false, nullable = false)
-	private UUID id;
-	
-	
-	@Column(name = "user_name")
-	private String userName;
+    @Id
+    @GeneratedValue(generator = "UUID")
+    @GenericGenerator(
+        name = "UUID",
+        strategy = "org.hibernate.id.UUIDGenerator"
+    )
+    @Type(type = "uuid-char")
+    @Column(name = "id", updatable = false, nullable = false)
+    private UUID id;
 
-	@JsonIgnore
-	@Column(name = "password")
-	private String password;
+    @Column(name = "user_name")
+    private String userName;
 
-	@Column(name = "full_name")
-	private String fullName;
+    @JsonIgnore
+    @Column(name = "password")
+    private String password;
 
-	@Column(name = "email")
-	private String email;
+    @Column(name = "full_name")
+    private String fullName;
 
-	@Column(name = "phone_no")
-	private String phoneNo;
+    @Column(name = "email")
+    private String email;
 
-	@Column(name = "address_line")
-	private String address;
+    @Column(name = "phone_no")
+    private String phoneNo;
 
-	@Type(type = "uuid-char")
-	@Column(name = "role_id")
-	private UUID userRoleId;
-	
-	private Status status;
-	
+    @Column(name = "address_line")
+    private String address;
 
-	public Status getStatus() {
-		return status;
-	}
+    @Type(type = "uuid-char")
+    @Column(name = "role_id")
+    private UUID userRoleId;
 
-	public void setStatus(Status status) {
-		this.status = status;
-	}
+    @Column(name = "change_password")
+    private Boolean changePassword = false;
 
-	public UUID getId() {
-		return id;
-	}
+    @Transient
+    private String reqPassword;
 
-	public void setId(UUID id) {
-		this.id = id;
-	}
-
-	public String getUserName() {
-		return userName;
-	}
-
-	public void setUserName(String userName) {
-		this.userName = userName;
-	}
-
-	public String getPassword() {
-		return password;
-	}
-
-	public void setPassword(String password) {
-		this.password = password;
-	}
-
-	public String getFullName() {
-		return fullName;
-	}
-
-	public void setFullName(String fullName) {
-		this.fullName = fullName;
-	}
-
-	public String getEmail() {
-		return email;
-	}
-
-	public void setEmail(String email) {
-		this.email = email;
-	}
-
-	public String getPhoneNo() {
-		return phoneNo;
-	}
-
-	public void setPhoneNo(String phoneNo) {
-		this.phoneNo = phoneNo;
-	}
-
-	public String getAddress() {
-		return address;
-	}
-
-	public void setAddress(String address) {
-		this.address = address;
-	}
-
-	public UUID getUserRoleId() {
-		return userRoleId;
-	}
-
-	public void setUserRoleId(UUID userRoleId) {
-		this.userRoleId = userRoleId;
-	}
-
-	public Boolean getChangePassword() {
-		return changePassword;
-	}
-
-	public void setChangePassword(Boolean changePassword) {
-		this.changePassword = changePassword;
-	}
-
-	public Date getDeletedOn() {
-		return deletedOn;
-	}
-
-	public void setDeletedOn(Date deletedOn) {
-		this.deletedOn = deletedOn;
-	}
-
-	public String getDeletedBy() {
-		return deletedBy;
-	}
-
-	public void setDeletedBy(String deletedBy) {
-		this.deletedBy = deletedBy;
-	}
-
-	public String getReqPassword() {
-		return reqPassword;
-	}
-
-	public void setReqPassword(String reqPassword) {
-		this.reqPassword = reqPassword;
-	}
-
-	public static long getSerialversionuid() {
-		return serialVersionUID;
-	}
-
-	@Column(name = "change_password")
-	private Boolean changePassword;
-	
-	@JsonIgnore
-	@Column(name = "deleted_on")
-	private Date deletedOn;
-
-	@JsonIgnore
-	@Column(name = "deleted_by")
-	private String deletedBy;
-
-	@Transient
-	@NotNull(message = "Password")
-	@ApiModelProperty(value = "Valid password", required = true, allowableValues = "String")
-	private String reqPassword;
-
-	public void setAndEncryptPassword(String password) {
-		setPassword(PasswordUtil.getEncryptedPassword(password));
-	}
-
-
+    public void setAndEncryptPassword(String password) {
+        this.password = PasswordUtil.getEncryptedPassword(password);
+    }
 }

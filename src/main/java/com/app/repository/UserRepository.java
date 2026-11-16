@@ -9,30 +9,38 @@ import org.springframework.data.repository.query.Param;
 import com.app.config.WriteableRepository;
 import com.app.entity.User;
 
-public interface UserRepository extends WriteableRepository<User, UUID> {
+public interface UserRepository
+        extends WriteableRepository<User, UUID> {
 
-    @Query("SELECT s FROM User s WHERE s.id = :id")
+    @Query("SELECT u FROM User u WHERE u.id = :id")
     Optional<User> findUserById(@Param("id") UUID id);
-    
-    @Query("SELECT u FROM User u where u.userName = ?#{principal?.phoneNo}")
-    public Optional<User> findLoggedInUser();
 
-    public Optional<User> findByUserName(String userName);
-    
-    public Optional<User> findByUserNameOrEmail(String value1,String value2);
+    @Query("SELECT u FROM User u WHERE u.userName = ?#{principal?.phoneNo}")
+    Optional<User> findLoggedInUser();
 
-	Optional<User> findByPhoneNo(String phoneNo);
+    Optional<User> findByUserName(String userName);
 
-	Optional<User> findByEmail(String email);
+    Optional<User> findByEmail(String email);
 
-	Optional<User> findByAddress(String address);
+    Optional<User> findByPhoneNo(String phoneNo);
 
-	boolean existsByEmail(String email);
-	boolean existsByEmailAndIdNot(String email, UUID id);
-	Optional<User> findByPasswordAndUserName(String encryptedPassword, String userName);
+    Optional<User> findByAddress(String address);
 
+    Optional<User> findByUserNameOrEmail(
+            String userName,
+            String email);
 
+    Optional<User> findByPasswordAndUserName(
+            String password,
+            String userName);
 
+    boolean existsByEmail(String email);
 
-	
+    boolean existsByUserName(String userName);
+
+    boolean existsByEmailAndIdNot(String email, UUID id);
+
+    boolean existsByUserNameAndIdNot(
+            String userName,
+            UUID id);
 }

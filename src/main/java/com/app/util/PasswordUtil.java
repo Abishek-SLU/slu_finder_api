@@ -1,26 +1,36 @@
 package com.app.util;
 
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-
-import org.apache.commons.codec.binary.Hex;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 
 public class PasswordUtil {
- 
-    public static String getEncryptedPassword(String password) {
 
-    	MessageDigest algorithm;
-   
- 		try {
- 			algorithm = MessageDigest.getInstance("SHA-1");
- 		} catch (NoSuchAlgorithmException e) {
- 			throw new RuntimeException("SHA-1 algorithm not found!");
- 		}
- 	    byte [] digest = algorithm.digest(password.getBytes());
- 	    return new String(Hex.encodeHex(digest));
+    private static final BCryptPasswordEncoder encoder =
+            new BCryptPasswordEncoder(12);
+
+    private PasswordUtil() {
     }
-    
-    public static void main(String[] args) {
-		System.out.println(getEncryptedPassword("hcl@2020"));
-	}
+
+    public static String getEncryptedPassword(String password) {
+        if (password == null || password.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "Password cannot be empty");
+        }
+
+        return encoder.encode(password);
+    }
+
+    public static boolean matches(
+            String rawPassword,
+            String storedPassword) {
+
+        if (rawPassword == null || storedPassword == null) {
+            return false;
+        }
+
+        if (!storedPassword.startsWith("$2")) {
+            return false;
+        }
+
+        return encoder.matches(rawPassword, storedPassword);
+    }
 }

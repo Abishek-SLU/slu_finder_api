@@ -1,3 +1,4 @@
+
 package com.app.security;
 
 import javax.annotation.Resource;
@@ -30,62 +31,81 @@ public class WebSecurityConfig extends WebSecurityConfigurerAdapter {
 
     @Override
     @Bean
-    public AuthenticationManager authenticationManagerBean() throws Exception {
+    public AuthenticationManager authenticationManagerBean()
+            throws Exception {
         return super.authenticationManagerBean();
     }
 
     @Autowired
-    public void globalUserDetails(AuthenticationManagerBuilder auth) throws Exception {
+    public void configureAuthentication(
+            AuthenticationManagerBuilder auth)
+            throws Exception {
+
         auth.userDetailsService(userDetailsService)
-                .passwordEncoder(encoder());
+            .passwordEncoder(encoder());
     }
 
     @Bean
-    public JwtAuthenticationFilter authenticationTokenFilterBean() throws Exception {
+    public JwtAuthenticationFilter authenticationTokenFilterBean()
+            throws Exception {
+
         return new JwtAuthenticationFilter();
     }
-    
+
     @Override
     public void configure(WebSecurity web) throws Exception {
-      // Allow swagger to be accessed without authentication
-      web.ignoring().antMatchers("/v2/api-docs")//
-          .antMatchers("/swagger-resources/**")//
-          .antMatchers("/swagger-ui.html")//
-          .antMatchers("/configuration/**")//
-          .antMatchers("/webjars/**")//
-          .antMatchers("/public")
-          .antMatchers("/file/view/**")
-          .antMatchers("/api/jasper-report/view")
-          .antMatchers("/api/agent/user/create/default")
-          .antMatchers("/api/itext/view")
-          // Un-secure H2 Database (for testing purposes, H2 console shouldn't be unprotected in production)
-          .and()
-          .ignoring()
-          .antMatchers("/h2-console/**/**");;
+
+        web.ignoring().antMatchers(
+            "/v2/api-docs",
+            "/swagger-resources/**",
+            "/swagger-ui.html",
+            "/configuration/**",
+            "/webjars/**"
+        );
     }
 
     @Override
     protected void configure(HttpSecurity http) throws Exception {
-        http.cors().and().csrf().disable().
-                authorizeRequests()
-                .antMatchers("/auth/login",
-                		"/auth/send/password",
-                		"/swagger-ui.html",
-                		"/file/view/**",
-                		"/api/user/**",
-                		"/api/register/**"
 
-                		).permitAll()
-                .anyRequest().authenticated()
-                .and()
-                .exceptionHandling().authenticationEntryPoint(unauthorizedHandler).and()
-                .sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS);
-        http.addFilterBefore(authenticationTokenFilterBean(), UsernamePasswordAuthenticationFilter.class);
+        http.cors().and()
+            .csrf().disable()
+            .authorizeRequests()
+
+            // Public authentication endpoints
+            .antMatchers(
+                "/auth/login",
+                "/api/register/generate-otp",
+                "/api/register/verify-otp",
+                "/api/register/create"
+            ).permitAll()
+
+            // Administrator-only user management
+            .antMatchers("/api/user/**")
+            .hasAnyRole("ADMIN", "SUPERADMIN")
+
+            // Old generic registration endpoint is not public
+            .antMatchers("/api/register/**")
+            .denyAll()
+
+            // Other endpoints require authentication
+            .anyRequest().authenticated()
+
+            .and()
+            .exceptionHandling()
+            .authenticationEntryPoint(unauthorizedHandler)
+
+            .and()
+            .sessionManagement()
+            .sessionCreationPolicy(SessionCreationPolicy.STATELESS);
+
+        http.addFilterBefore(
+            authenticationTokenFilterBean(),
+            UsernamePasswordAuthenticationFilter.class
+        );
     }
 
     @Bean
-    public BCryptPasswordEncoder encoder(){
-        return new BCryptPasswordEncoder();
+    public BCryptPasswordEncoder encoder() {
+        return new BCryptPasswordEncoder(12);
     }
-
 }

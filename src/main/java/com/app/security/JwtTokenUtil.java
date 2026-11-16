@@ -1,14 +1,13 @@
+
 package com.app.security;
 
 import static com.app.util.Constants.ACCESS_TOKEN_VALIDITY_SECONDS;
 import static com.app.util.Constants.SIGNING_KEY;
 
 import java.io.Serializable;
-import java.util.Arrays;
 import java.util.Date;
 import java.util.function.Function;
 
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Component;
 
@@ -21,9 +20,6 @@ import io.jsonwebtoken.SignatureAlgorithm;
 @Component
 public class JwtTokenUtil implements Serializable {
 
-    /**
-     * 
-     */
     private static final long serialVersionUID = 1L;
 
     public String getUsernameFromToken(String token) {
@@ -34,9 +30,12 @@ public class JwtTokenUtil implements Serializable {
         return getClaimFromToken(token, Claims::getExpiration);
     }
 
-    public <T> T getClaimFromToken(String token, Function<Claims, T> claimsResolver) {
-        final Claims claims = getAllClaimsFromToken(token);
-        return claimsResolver.apply(claims);
+    public <T> T getClaimFromToken(
+            String token,
+            Function<Claims, T> resolver) {
+
+        Claims claims = getAllClaimsFromToken(token);
+        return resolver.apply(claims);
     }
 
     private Claims getAllClaimsFromToken(String token) {
@@ -46,33 +45,36 @@ public class JwtTokenUtil implements Serializable {
                 .getBody();
     }
 
-    private Boolean isTokenExpired(String token) {
-        final Date expiration = getExpirationDateFromToken(token);
-        return expiration.before(new Date());
+    private boolean isTokenExpired(String token) {
+        return getExpirationDateFromToken(token)
+                .before(new Date());
     }
 
     public String generateToken(User user) {
-        return doGenerateToken(user.getUserName());
-    }
 
-    private String doGenerateToken(String subject) {
-
-        Claims claims = Jwts.claims().setSubject(subject);
-        claims.put("scopes", Arrays.asList(new SimpleGrantedAuthority("ROLE_ADMIN")));
+        long now = System.currentTimeMillis();
 
         return Jwts.builder()
-                .setClaims(claims)
-                .setIssuer("http://com.app")
-                .setIssuedAt(new Date(System.currentTimeMillis()))
-                .setExpiration(new Date(System.currentTimeMillis() + ACCESS_TOKEN_VALIDITY_SECONDS * 1000))
-                .signWith(SignatureAlgorithm.HS256, SIGNING_KEY)
+                .setSubject(user.getUserName())
+                .setIssuer("SLU-Finder")
+                .setIssuedAt(new Date(now))
+                .setExpiration(new Date(
+                    now + ACCESS_TOKEN_VALIDITY_SECONDS * 1000L))
+                .signWith(
+                    SignatureAlgorithm.HS256,
+                    SIGNING_KEY
+                )
                 .compact();
     }
 
-    public Boolean validateToken(String token, UserDetails userDetails) {
-        final String username = getUsernameFromToken(token);
-        return (username.equals(userDetails.getUsername())
-                && !isTokenExpired(token));
-    }
+    public boolean validateToken(
+            String token,
+            UserDetails userDetails) {
 
+        String username = getUsernameFromToken(token);
+
+        return username.equals(userDetails.getUsername())
+                && !isTokenExpired(token)
+                && userDetails.isEnabled();
+    }
 }

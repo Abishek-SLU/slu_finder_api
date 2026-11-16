@@ -1,254 +1,261 @@
+
 package com.app.controller;
 
 import java.security.Principal;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Random;
 
-import org.apache.log4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.context.MessageSource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.lang.NonNull;
-import org.springframework.mail.SimpleMailMessage;
-import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.web.bind.annotation.*;
 
-import com.app.dto.ErrorDto;
 import com.app.dto.LoginRequest;
 import com.app.dto.LoginResponse;
-import com.app.dto.OtpDTO;
-import com.app.dto.PasswordSendEvent;
 import com.app.dto.PasswordUpdateDTO;
 import com.app.entity.Role;
 import com.app.entity.User;
 import com.app.enumeration.Status;
-import com.app.enumeration.UserType;
 import com.app.repository.RoleRepository;
 import com.app.repository.UserRepository;
-import com.app.response.Response;
 import com.app.response.ResponseGenerator;
 import com.app.response.TransactionContext;
 import com.app.security.JwtTokenUtil;
-import com.app.service.MessagePropertyService;
 import com.app.service.UserService;
 import com.app.util.PasswordUtil;
 
-import io.swagger.annotations.Api;
-import io.swagger.annotations.ApiOperation;
-import io.swagger.annotations.ApiParam;
-import lombok.RequiredArgsConstructor;
-import net.bytebuddy.utility.RandomString;
-
-@CrossOrigin(origins = "*", maxAge = 3600)
 @RestController
 @RequestMapping("/auth")
-@Api(value = "Authorization Rest API", 
-     description = "Defines endpoints for unauthenticated access (e.g., login, password reset).")
-@RequiredArgsConstructor
+@CrossOrigin(origins = "*", maxAge = 3600)
 public class AuthenticationController {
 
-    private static final Logger logger = Logger.getLogger(AuthenticationController.class);
+    @Autowired
+    private UserRepository userRepository;
 
-    @Autowired private ResponseGenerator responseGenerator;
-    @Autowired private UserRepository userRepository;
-    @Autowired private UserService userService;
-    @Autowired private JwtTokenUtil jwtTokenUtil;
-    @Autowired private MessageSource messageSource;
-    @Autowired private RoleRepository roleRepository;
-    @Autowired private MessagePropertyService messagePropertySource;
-    @Autowired private ApplicationEventPublisher applicationEventPublisher;
-    @Autowired private JavaMailSender emailSender;
-    
-    // =========================== LOGIN ===========================
+    @Autowired
+    private RoleRepository roleRepository;
 
-    @ApiOperation(value = "Logs the user in to the system and returns auth tokens")
-    @PostMapping(value = "/login", consumes = "application/json", produces = "application/json")
+    @Autowired
+    private UserService userService;
+
+    @Autowired
+    private JwtTokenUtil jwtTokenUtil;
+
+    @Autowired
+    private ResponseGenerator responseGenerator;
+
+    @PostMapping("/login")
     public ResponseEntity<?> login(
-            @ApiParam(value = "The LoginRequest payload") 
             @RequestBody LoginRequest request,
-            @RequestHeader HttpHeaders httpHeader) throws Exception {
+            @RequestHeader HttpHeaders headers) {
 
-        System.out.println(request.getUserName());
-        Map<String, Object> response = new HashMap<>();
-        ErrorDto errorDto = new ErrorDto();
+        TransactionContext context =
+                responseGenerator.generateTransationContext(headers);
 
-        if (request == null) {
-            errorDto.setCode("400");
-            errorDto.setMessage("Invalid Request Payload.!");
-            response.put("status", 0);
-            response.put("error", errorDto);
-            return ResponseEntity.badRequest().body(response);
+        if (request == null ||
+                request.getUserName() == null ||
+                request.getPassword() == null) {
+
+            return responseGenerator.errorResponse(
+                context,
+                "Username and password are required",
+                HttpStatus.BAD_REQUEST
+            );
         }
 
-        // 1️⃣ Check username
-        Optional<User> userOptional = userRepository.findByUserName(request.getUserName());
+        String identifier = request.getUserName().trim();
+
+        Optional<User> userOptional =
+                userRepository.findByUserNameOrEmail(
+                    identifier, identifier);
+
         if (!userOptional.isPresent()) {
-            errorDto.setCode("400");
-            errorDto.setMessage("Invalid Username.!");
-            response.put("status", 0);
-            response.put("error", errorDto);
-            return ResponseEntity.badRequest().body(response);
+            return invalidLogin(context);
         }
 
         User user = userOptional.get();
 
-        // 2️⃣ Status validation
         if (user.getStatus() != Status.ACTIVE) {
-            errorDto.setCode("400");
-            errorDto.setMessage("User is not active. Please contact the administrator.");
-            response.put("status", 0);
-            response.put("error", errorDto);
-            return ResponseEntity.badRequest().body(response);
+            return invalidLogin(context);
         }
 
-        // 3️⃣ Password validation
-        String encryptedPassword = PasswordUtil.getEncryptedPassword(request.getPassword());
-        if (!user.getPassword().equals(encryptedPassword)) {
-            errorDto.setCode("400");
-            errorDto.setMessage("Password is wrong.!");
-            response.put("status", 0);
-            response.put("error", errorDto);
-            return ResponseEntity.badRequest().body(response);
+        if (!PasswordUtil.matches(
+                request.getPassword(),
+                user.getPassword())) {
+            return invalidLogin(context);
         }
 
-        // 4️⃣ Generate JWT Token
-        final String token = jwtTokenUtil.generateToken(user);
-        Optional<UserType> role = roleRepository.findRoleNameById(user.getUserRoleId());
+        Role role = roleRepository.findById(user.getUserRoleId())
+                .orElse(null);
 
-        response.put("status", 1);
-        response.put("message", "Logged in Successfully.!");
-        response.put("jwt", token);
-        response.put("roleName",role);
-        response.put("isOtpVerified", true);
+        if (role == null ||
+                role.getRoleName() == null ||
+                role.getStatus() != Status.ACTIVE) {
+            return invalidLogin(context);
+        }
 
-        TransactionContext context = responseGenerator.generateTransationContext(httpHeader);
-        return responseGenerator.successResponse(context, response, HttpStatus.OK);
+        String token = jwtTokenUtil.generateToken(user);
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("status", 1);
+        data.put("message", "Logged in Successfully");
+        data.put("jwt", token);
+        data.put("roleName", role.getRoleName().name());
+        data.put("userName", user.getUserName());
+        data.put("fullName", user.getFullName());
+        data.put("isOtpVerified", true);
+
+        return responseGenerator.successResponse(
+                context,
+                data,
+                HttpStatus.OK
+        );
     }
 
-    // ======================= USER DETAILS =========================
+    private ResponseEntity<?> invalidLogin(
+            TransactionContext context) {
 
-    @ApiOperation(value = "Get logged in user details based on JWT")
-    @GetMapping(value = "/user-details", produces = "application/json")
-    public ResponseEntity<?> getUserDetails(Principal principal, 
-                                            @RequestHeader HttpHeaders httpHeader) throws Exception {
-
-        TransactionContext context = responseGenerator.generateTransationContext(httpHeader);
-        Map<String, Object> response = new HashMap<>();
-
-        Optional<User> userOptional = userRepository.findByUserName(principal.getName());
-        if (!userOptional.isPresent()) {
-            return responseGenerator.errorResponse(context, "User not found", HttpStatus.NOT_FOUND);
-        }
-
-        User user = userOptional.get();
-        LoginResponse loginResponse = new LoginResponse();
-        loginResponse.setFullName(user.getFullName());
-        loginResponse.setPhone(user.getPhoneNo());
-        loginResponse.setUserId(user.getId());
-        loginResponse.setUserName(user.getUserName());
-        loginResponse.setChangePassword(user.getChangePassword());
-        loginResponse.setAddress(user.getAddress());
-        loginResponse.setRoleId(user.getUserRoleId());
-
-        response.put("loginObj", loginResponse);
-        return responseGenerator.successResponse(context, response, HttpStatus.OK);
+        return responseGenerator.errorResponse(
+            context,
+            "Invalid username or password",
+            HttpStatus.UNAUTHORIZED
+        );
     }
 
-    // =================== CHANGE PASSWORD =========================
+    @GetMapping("/user-details")
+    public ResponseEntity<?> getUserDetails(
+            Principal principal,
+            @RequestHeader HttpHeaders headers) {
 
-    @ApiOperation(value = "Allows user to change current password", response = Response.class)
-    @PutMapping(value = "/change/password", produces = "application/json")
-    public ResponseEntity<?> updatePassword(
-            @ApiParam(value = "Payload for change current password")
+        TransactionContext context =
+                responseGenerator.generateTransationContext(headers);
+
+        if (principal == null) {
+            return responseGenerator.errorResponse(
+                context,
+                "Unauthorized",
+                HttpStatus.UNAUTHORIZED
+            );
+        }
+
+        User user = userRepository
+                .findByUserName(principal.getName())
+                .orElse(null);
+
+        if (user == null) {
+            return responseGenerator.errorResponse(
+                context,
+                "User not found",
+                HttpStatus.NOT_FOUND
+            );
+        }
+
+        LoginResponse details = new LoginResponse();
+        details.setUserId(user.getId());
+        details.setUserName(user.getUserName());
+        details.setFullName(user.getFullName());
+        details.setPhone(user.getPhoneNo());
+        details.setAddress(user.getAddress());
+        details.setRoleId(user.getUserRoleId());
+        details.setChangePassword(user.getChangePassword());
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("loginObj", details);
+
+        return responseGenerator.successResponse(
+                context,
+                data,
+                HttpStatus.OK
+        );
+    }
+
+    @PutMapping("/change/password")
+    public ResponseEntity<?> changePassword(
             @RequestBody PasswordUpdateDTO request,
-            @RequestHeader HttpHeaders httpHeaders,
-            Principal principal) throws Exception {
+            Principal principal,
+            @RequestHeader HttpHeaders headers) {
 
-        TransactionContext context = responseGenerator.generateTransationContext(httpHeaders);
-        String userName = principal.getName();
+        TransactionContext context =
+                responseGenerator.generateTransationContext(headers);
 
-        Optional<User> userOptional = userService.findByPassword(
-                PasswordUtil.getEncryptedPassword(request.getOldPassword()), userName);
-
-        if (!userOptional.isPresent()) {
-            return responseGenerator.errorResponse(context,
-                    messagePropertySource.getMessage("invalid.user.password"),
-                    HttpStatus.BAD_REQUEST);
+        if (principal == null) {
+            return responseGenerator.errorResponse(
+                context,
+                "Unauthorized",
+                HttpStatus.UNAUTHORIZED
+            );
         }
 
-        User userObj = userOptional.get();
+        User user = userRepository
+                .findByUserName(principal.getName())
+                .orElse(null);
 
-        if (!request.getNewPassword().equals(request.getConfirmPassword())) {
-            return responseGenerator.errorResponse(context,
-                    messagePropertySource.getMessage("invalid.new.and.confirm.password"),
-                    HttpStatus.BAD_REQUEST);
+        if (user == null) {
+            return responseGenerator.errorResponse(
+                context,
+                "User not found",
+                HttpStatus.NOT_FOUND
+            );
         }
 
-        if (request.getConfirmPassword().equals(request.getOldPassword())) {
-            return responseGenerator.errorResponse(context,
-                    messagePropertySource.getMessage("invalid.old.and.new.password"),
-                    HttpStatus.BAD_REQUEST);
+        if (request == null ||
+                request.getOldPassword() == null ||
+                request.getNewPassword() == null ||
+                request.getConfirmPassword() == null) {
+
+            return responseGenerator.errorResponse(
+                context,
+                "All password fields are required",
+                HttpStatus.BAD_REQUEST
+            );
         }
 
-        userObj.setPassword(PasswordUtil.getEncryptedPassword(request.getNewPassword()));
-        userObj.setChangePassword(true);
-        userService.saveOrUpdate(userObj);
+        if (!PasswordUtil.matches(
+                request.getOldPassword(),
+                user.getPassword())) {
 
-        return responseGenerator.successResponse(context,
-                messagePropertySource.getMessage("password.update"),
-                HttpStatus.OK);
-    }
-
-    // =================== SEND NEW PASSWORD =======================
-
-    @ApiOperation(value = "Send new password to user", response = Response.class)
-    @PutMapping(value = "/send/password", produces = "application/json")
-    public ResponseEntity<?> sendPassword(
-            @ApiParam(value = "OTP DTO request payload")
-            @RequestBody OtpDTO request,
-            @RequestHeader HttpHeaders httpHeader) throws Exception {
-
-        TransactionContext context = responseGenerator.generateTransationContext(httpHeader);
-
-        if (request.getUserNameOrEmail() == null || request.getUserNameOrEmail().isEmpty()) {
-            return responseGenerator.errorResponse(context,
-                    messagePropertySource.getMessage("payload.invalid"),
-                    HttpStatus.BAD_REQUEST);
+            return responseGenerator.errorResponse(
+                context,
+                "Current password is incorrect",
+                HttpStatus.BAD_REQUEST
+            );
         }
 
-        User userObj = userService.getUserByUserNameOrEmail(request.getUserNameOrEmail());
-        if (userObj == null) {
-            return responseGenerator.errorResponse(context,
-                    messagePropertySource.getMessage("username.email.invalid"),
-                    HttpStatus.BAD_REQUEST);
+        if (!request.getNewPassword().equals(
+                request.getConfirmPassword())) {
+
+            return responseGenerator.errorResponse(
+                context,
+                "New passwords do not match",
+                HttpStatus.BAD_REQUEST
+            );
         }
 
-        // Generate new random password
-        String prefix = RandomString.make(4);
-        int suffix = 100000 + new Random().nextInt(900000);
-        String newPassword = prefix + suffix;
+        if (request.getNewPassword().length() < 8 ||
+                request.getNewPassword().equals(
+                    request.getOldPassword())) {
 
-        // Send email
-        SimpleMailMessage message = new SimpleMailMessage();
-        PasswordSendEvent mailEvent = new PasswordSendEvent(this, newPassword);
-        mailEvent.setEmailTo(userObj.getEmail());
-        applicationEventPublisher.publishEvent(mailEvent);
+            return responseGenerator.errorResponse(
+                context,
+                "Choose a different password with at least 8 characters",
+                HttpStatus.BAD_REQUEST
+            );
+        }
 
-        message.setTo(userObj.getEmail());
-        message.setSubject("Your New Temporary Password");
-        message.setText("Your new password is: " + newPassword);
-        emailSender.send(message);
+        user.setPassword(
+            PasswordUtil.getEncryptedPassword(
+                request.getNewPassword())
+        );
 
-        userObj.setPassword(PasswordUtil.getEncryptedPassword(newPassword));
-        userService.update(userObj);
+        user.setChangePassword(true);
+        userService.update(user);
 
-        return responseGenerator.successResponse(context,
-                messagePropertySource.getMessage("password.send"),
-                HttpStatus.OK);
+        return responseGenerator.successResponse(
+                context,
+                "Password changed successfully",
+                HttpStatus.OK
+        );
     }
 }
